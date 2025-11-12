@@ -1,0 +1,78 @@
+---
+- hosts: Ubuntu, CentOS
+  become: true
+  pre_tasks:
+
+    - name: update repository index (CentOS)
+      tags: centos
+      package:
+        update_cache: yes
+      changed_when: false
+      when: ansible_distribution == "CentOS"
+
+    - name: update repository index (Ubuntu)
+      tags: ubuntu
+      package:
+        update_cache: yes
+      changed_when: false
+      when: ansible_distribution == "Ubuntu"
+
+    # Ubuntu
+    - name: Install Docker (Ubuntu)
+      tags: ubuntu, docker
+      package: 
+        name: docker.io
+        state: latest
+      when: ansible_distribution == "Ubuntu"
+
+    # CentOS
+    - name: Install yum utils
+      tags: centos, docker
+      yum:
+        name: yum-utils
+        state: latest
+      when: ansible_distribution == "CentOS"
+
+    - name: Add Docker repo
+      tags: centos, docker
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+      become: yes
+      when: ansible_distribution == "CentOS"
+
+    - name: Install Docker (CentOS)
+      tags: centos, docker
+      package: 
+        name: docker-ce
+        state: latest
+      when: ansible_distribution == "CentOS"
+
+    # Both
+    - name: Start Docker Service
+      tags: docker, ubuntu, centos
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+  post_tasks:
+    - name: Run Docker Container
+      tags: ubuntucon
+      docker_container:
+        name: sampleweb
+        image: "khlvn/web-app:latest"
+        ports:
+          - "8080:80"
+        state: started
+
+# roles
+- hosts: CentOS
+  become: true
+  roles:
+    - CentOS
+
+- hosts: Ubuntu
+  become: true
+  roles:
+    - Ubuntu
