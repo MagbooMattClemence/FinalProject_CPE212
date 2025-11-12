@@ -1,72 +1,162 @@
 ---
 - hosts: Ubuntu, CentOS
   become: true
+
   pre_tasks:
+    ######################################################
+    # Pre-checks and environment preparation
+    ######################################################
 
-    - name: update repository index (CentOS)
-      tags: centos
+    # Update apt cache for Ubuntu
+    - name: Update repository index (Ubuntu)
       package:
         update_cache: yes
+      when: ansible_distribution == "Ubuntu"
       changed_when: false
+
+    # Install Docker Python SDK using OS package (avoid pip issues on Ubuntu 24+)
+    - name: Install Python Docker SDK (Ubuntu)
+      apt:
+        name: python3-docker
+        state: present
+      when: ansible_distribution == "Ubuntu"
+      ignore_errors: yes
+
+    - name: Install Python Docker SDK (CentOS)
+      yum:
+        name: python3-docker
+        state: present
       when: ansible_distribution == "CentOS"
+      ignore_errors: yes
 
-    - name: update repository index (Ubuntu)
-      tags: ubuntu
-      package:
-        update_cache: yes
-      changed_when: false
+    # Remove old Docker packages (Ubuntu)
+    - name: Remove conflicting Docker and containerd packages (Ubuntu)
+      apt:
+        name:
+          - docker.io
+          - containerd
+          - containerd.io
+        state: absent
+      when: ansible_distribution == "Ubuntu"
+      ignore_errors: yes
+
+    # Clean Docker directories (Ubuntu)
+    - name: Purge Docker configuration files (Ubuntu)
+      file:
+        path: /etc/docker
+        state: absent
+      when: ansible_distribution == "Ubuntu"
+      ignore_errors: yes
+
+    # Ensure Docker group exists (Ubuntu)
+    - name: Ensure docker group exists (Ubuntu)
+      group:
+        name: docker
+        state: present
       when: ansible_distribution == "Ubuntu"
 
-    # Ubuntu
-    - name: Install Docker (Ubuntu)
-      tags: ubuntu, docker
-      package: 
-        name: docker.io
+  tasks:
+    ######################################################
+    # Ubuntu-specific tasks
+    ######################################################
+
+    - name: Add Docker GPG key (Ubuntu)
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Add Docker official repository (Ubuntu)
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Install Docker packages (Ubuntu)
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
         state: latest
+        update_cache: yes
       when: ansible_distribution == "Ubuntu"
 
-    # CentOS
-    - name: Install yum utils
-      tags: centos, docker
+    ######################################################
+    # CentOS-specific tasks
+    ######################################################
+
+    - name: Install yum utils (CentOS)
       yum:
         name: yum-utils
         state: latest
       when: ansible_distribution == "CentOS"
 
-    - name: Add Docker repo
-      tags: centos, docker
+    - name: Add Docker repo (CentOS)
       get_url:
         url: https://download.docker.com/linux/centos/docker-ce.repo
         dest: /etc/yum.repos.d/docker-ce.repo
-      become: yes
       when: ansible_distribution == "CentOS"
 
     - name: Install Docker (CentOS)
-      tags: centos, docker
-      package: 
+      package:
         name: docker-ce
         state: latest
       when: ansible_distribution == "CentOS"
 
-    # Both
-    - name: Start Docker Service
-      tags: docker, ubuntu, centos
+    ######################################################
+    # Common tasks
+    ######################################################
+
+    - name: Ensure containerd directory exists (Ubuntu)
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Generate default containerd config (Ubuntu)
+      command: bash -c "containerd config default > /etc/containerd/config.toml"
+      args:
+        creates: /etc/containerd/config.toml
+      when: ansible_distribution == "Ubuntu"
+      ignore_errors: yes
+
+    - name: Restart containerd service (Ubuntu)
+      service:
+        name: containerd
+        state: restarted
+        enabled: true
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Restart Docker service
       service:
         name: docker
-        state: started
+        state: restarted
         enabled: true
 
+  ######################################################
+  # Post tasks: Run a Docker container
+  ######################################################
+
   post_tasks:
-    - name: Run Docker Container
-      tags: ubuntucon
+    - name: Run Docker container (Ubuntu & CentOS)
       docker_container:
-        name: sampleweb
-        image: "khlvn/web-app:latest"
+        name: magboo_webapp        # 👈 custom container name
+        image: "mcm/web-app:latest" # 👈 your image
         ports:
           - "8080:80"
         state: started
+        recreate: true            # replaces existing container if present
+      ignore_errors: yes
 
-# roles
+######################################################
+# Roles section (optional)
+######################################################
+
 - hosts: CentOS
   become: true
   roles:
@@ -76,3 +166,4 @@
   become: true
   roles:
     - Ubuntu
+

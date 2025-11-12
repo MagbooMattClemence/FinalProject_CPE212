@@ -1,0 +1,39 @@
+---
+# Ensure Docker group & permissions
+- name: Ensure Ansible user is in docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Fix Docker socket permissions
+  file:
+    path: /var/run/docker.sock
+    owner: root
+    group: docker
+    mode: '0660'
+
+- name: Restart Docker service
+  service:
+    name: docker
+    state: restarted
+    enabled: true
+
+# Build Docker image locally
+- name: Build Docker image locally (CentOS)
+  docker_image:
+    name: "mcm/web-app"
+    tag: latest
+    build:
+      path: /home/Magboo/FinalProject_CPE212
+
+# Run Docker container
+- name: Run Docker container (CentOS)
+  docker_container:
+    name: magboo_webapp
+    image: "mcm/web-app:latest"
+    ports:
+      - "8080:80"
+    state: started
+    recreate: true
+
