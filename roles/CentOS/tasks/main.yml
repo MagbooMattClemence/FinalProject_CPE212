@@ -1,0 +1,16 @@
+---
+- name: Load Docker image on CentOS
+  community.docker.docker_image:
+    name: mcm/web-app
+    tag: latest
+    load_path: /tmp/mcm_web_app.tar
+
+- name: Run Docker container on CentOS
+  community.docker.docker_container:
+    name: magboo_webapp_centos
+    image: mcm/web-app:latest
+    ports:
+      - "8081:80"
+    state: started
+    recreate: true
+

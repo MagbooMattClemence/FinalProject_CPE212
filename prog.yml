@@ -1,169 +1,93 @@
 ---
-- hosts: Ubuntu, CentOS
+# ============================================================================
+# Step 1: Build Docker image locally on control node
+# ============================================================================
+- name: Build Docker image locally on control node
+  hosts: localhost
   become: true
-
-  pre_tasks:
-    ######################################################
-    # Pre-checks and environment preparation
-    ######################################################
-
-    # Update apt cache for Ubuntu
-    - name: Update repository index (Ubuntu)
-      package:
-        update_cache: yes
-      when: ansible_distribution == "Ubuntu"
-      changed_when: false
-
-    # Install Docker Python SDK using OS package (avoid pip issues on Ubuntu 24+)
-    - name: Install Python Docker SDK (Ubuntu)
-      apt:
-        name: python3-docker
-        state: present
-      when: ansible_distribution == "Ubuntu"
-      ignore_errors: yes
-
-    - name: Install Python Docker SDK (CentOS)
-      yum:
-        name: python3-docker
-        state: present
-      when: ansible_distribution == "CentOS"
-      ignore_errors: yes
-
-    # Remove old Docker packages (Ubuntu)
-    - name: Remove conflicting Docker and containerd packages (Ubuntu)
-      apt:
-        name:
-          - docker.io
-          - containerd
-          - containerd.io
-        state: absent
-      when: ansible_distribution == "Ubuntu"
-      ignore_errors: yes
-
-    # Clean Docker directories (Ubuntu)
-    - name: Purge Docker configuration files (Ubuntu)
-      file:
-        path: /etc/docker
-        state: absent
-      when: ansible_distribution == "Ubuntu"
-      ignore_errors: yes
-
-    # Ensure Docker group exists (Ubuntu)
-    - name: Ensure docker group exists (Ubuntu)
-      group:
-        name: docker
-        state: present
-      when: ansible_distribution == "Ubuntu"
-
   tasks:
-    ######################################################
-    # Ubuntu-specific tasks
-    ######################################################
 
-    - name: Add Docker GPG key (Ubuntu)
-      get_url:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        dest: /etc/apt/keyrings/docker.asc
-        mode: '0644'
-      when: ansible_distribution == "Ubuntu"
-
-    - name: Add Docker official repository (Ubuntu)
-      apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-        state: present
-      when: ansible_distribution == "Ubuntu"
-
-    - name: Install Docker packages (Ubuntu)
+    - name: Ensure Docker is installed (Ubuntu)
       apt:
         name:
           - docker-ce
           - docker-ce-cli
           - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
-        state: latest
+        state: present
         update_cache: yes
-      when: ansible_distribution == "Ubuntu"
-
-    ######################################################
-    # CentOS-specific tasks
-    ######################################################
-
-    - name: Install yum utils (CentOS)
-      yum:
-        name: yum-utils
-        state: latest
-      when: ansible_distribution == "CentOS"
-
-    - name: Add Docker repo (CentOS)
-      get_url:
-        url: https://download.docker.com/linux/centos/docker-ce.repo
-        dest: /etc/yum.repos.d/docker-ce.repo
-      when: ansible_distribution == "CentOS"
-
-    - name: Install Docker (CentOS)
-      package:
-        name: docker-ce
-        state: latest
-      when: ansible_distribution == "CentOS"
-
-    ######################################################
-    # Common tasks
-    ######################################################
-
-    - name: Ensure containerd directory exists (Ubuntu)
-      file:
-        path: /etc/containerd
-        state: directory
-        mode: '0755'
-      when: ansible_distribution == "Ubuntu"
-
-    - name: Generate default containerd config (Ubuntu)
-      command: bash -c "containerd config default > /etc/containerd/config.toml"
-      args:
-        creates: /etc/containerd/config.toml
       when: ansible_distribution == "Ubuntu"
       ignore_errors: yes
 
-    - name: Restart containerd service (Ubuntu)
-      service:
-        name: containerd
-        state: restarted
-        enabled: true
-      when: ansible_distribution == "Ubuntu"
-
-    - name: Restart Docker service
+    - name: Ensure Docker service is running
       service:
         name: docker
-        state: restarted
+        state: started
         enabled: true
 
-  ######################################################
-  # Post tasks: Run a Docker container
-  ######################################################
+    - name: Build Docker image locally
+      command: docker build -t mcm/web-app:latest "{{ playbook_dir }}/Docker"
+      args:
+        chdir: "{{ playbook_dir }}/Docker"
 
-  post_tasks:
-    - name: Run Docker container (Ubuntu & CentOS)
+    - name: Save Docker image as tarball
+      command: docker save -o "{{ playbook_dir }}/mcm_webapp.tar" mcm/web-app:latest
+
+    - name: Ensure tarball is readable
+      file:
+        path: "{{ playbook_dir }}/mcm_webapp.tar"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: '0644'
+
+# ============================================================================
+# Step 2: Deploy Docker image to Ubuntu and CentOS nodes
+# ============================================================================
+- name: Deploy Docker image to managed nodes
+  hosts: Ubuntu, CentOS
+  become: true
+  tasks:
+
+    - name: Install Docker (Ubuntu)
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+      when: ansible_distribution == "Ubuntu"
+      ignore_errors: yes
+
+    - name: Install Docker (CentOS)
+      yum:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+      when: ansible_distribution == "CentOS"
+      ignore_errors: yes
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Copy Docker image tarball to managed node
+      copy:
+        src: "{{ playbook_dir }}/mcm_webapp.tar"
+        dest: /tmp/mcm_webapp.tar
+        mode: '0644'
+
+    - name: Load Docker image on managed node
+      command: docker load -i /tmp/mcm_webapp.tar
+
+    - name: Run Docker container
       docker_container:
-        name: magboo_webapp        # 👈 custom container name
-        image: "mcm/web-app:latest" # 👈 your image
+        name: magboo_webapp
+        image: mcm/web-app:latest
         ports:
           - "8080:80"
         state: started
-        recreate: true            # replaces existing container if present
-      ignore_errors: yes
-
-######################################################
-# Roles section (optional)
-######################################################
-
-- hosts: CentOS
-  become: true
-  roles:
-    - CentOS
-
-- hosts: Ubuntu
-  become: true
-  roles:
-    - Ubuntu
 
