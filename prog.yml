@@ -24,7 +24,7 @@
         state: started
         enabled: true
 
-    - name: Build Docker image locally
+    - name: Rebuild Docker image including updated Website folder
       command: docker build -t mcm/web-app:latest "{{ playbook_dir }}/Docker"
       args:
         chdir: "{{ playbook_dir }}/Docker"
@@ -40,7 +40,7 @@
         mode: '0644'
 
 # ============================================================================
-# Step 2: Deploy Docker image to Ubuntu and CentOS nodes
+# Step 2: Deploy Docker image to Ubuntu and CentOS managed nodes
 # ============================================================================
 - name: Deploy Docker image to managed nodes
   hosts: Ubuntu, CentOS
@@ -83,11 +83,27 @@
     - name: Load Docker image on managed node
       command: docker load -i /tmp/mcm_webapp.tar
 
-    - name: Run Docker container
+    - name: Stop and remove existing container if present
+      docker_container:
+        name: magboo_webapp
+        state: absent
+        force_kill: true
+
+    - name: Run updated Docker container
       docker_container:
         name: magboo_webapp
         image: mcm/web-app:latest
         ports:
           - "8080:80"
+        restart_policy: always
         state: started
+        recreate: true
+
+    - name: Verify container is running
+      command: docker ps --filter "name=magboo_webapp" --format "{{'{{'}}.Status{{'}}'}}"
+      register: container_status
+
+    - name: Display container status
+      debug:
+        msg: "Container status: {{ container_status.stdout }}"
 

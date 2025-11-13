@@ -1,49 +1,46 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Portfolio</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h2 { margin-top: 30px; }
-        ul { list-style: none; padding-left: 0; }
-        li { margin-bottom: 8px; }
-        a { text-decoration: none; color: #007BFF; }
-        a:hover { text-decoration: underline; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Our Portfolio</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-    <h1>Portfolio</h1>
-    <div id="portfolio"></div>
+  <header class="fb-header">
+    <h1>Our Portfolio</h1>
+  </header>
 
-    <script>
-        const folders = ["Magboo", "Potestades", "Villasenor"];
-        const container = document.getElementById("portfolio");
+  <main class="member-grid">
+    <div class="member-card">
+      <a href="Magboo/">
+        <img src="Magboo/profile.jpg" alt="Magboo">
+        <h2>Magboo</h2>
+      </a>
+    </div>
+    <div class="member-card">
+      <a href="Potestades/">
+        <img src="Potestades/profile.jpg" alt="Potestades">
+        <h2>Potestades</h2>
+      </a>
+    </div>
+    <div class="member-card">
+      <a href="Planta/">
+        <img src="Planta/profile.jpg" alt="Planta">
+        <h2>Planta</h2>
+      </a>
+    </div>
+    <div class="member-card">
+      <a href="Villasenor/">
+        <img src="Villasenor/profile.jpg" alt="Villasenor">
+        <h2>Villasenor</h2>
+      </a>
+    </div>
+  </main>
 
-        folders.forEach(folder => {
-            const h2 = document.createElement("h2");
-            h2.textContent = folder;
-            container.appendChild(h2);
-
-            const ul = document.createElement("ul");
-            fetch(folder + "/")
-                .then(response => response.text())
-                .then(html => {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, "text/html");
-                    const links = doc.querySelectorAll("a");
-                    links.forEach(link => {
-                        const li = document.createElement("li");
-                        const a = document.createElement("a");
-                        a.href = folder + "/" + link.getAttribute("href");
-                        a.textContent = link.getAttribute("href");
-                        a.target = "_blank";
-                        li.appendChild(a);
-                        ul.appendChild(li);
-                    });
-                });
-            container.appendChild(ul);
-        });
-    </script>
+  <footer>
+    <p>© 2025 CPE212 Portfolio</p>
+  </footer>
 </body>
 </html>
 

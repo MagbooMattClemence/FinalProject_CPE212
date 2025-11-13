@@ -2,16 +2,21 @@ FROM ubuntu:latest
 
 RUN apt-get update && apt-get install -y apache2
 
-# Copy Website folder
+# Copy website files
 COPY Website/ /var/www/html/
 
-# Enable Apache directory listing
-RUN a2enmod autoindex
+# Fix permissions
+RUN chmod -R 755 /var/www/html && \
+    chown -R www-data:www-data /var/www/html
 
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html
+# Enable directory indexing and permissions correctly (multi-line syntax)
+RUN printf '<Directory /var/www/html/>\n\
+    Options Indexes FollowSymLinks\n\
+    AllowOverride All\n\
+    Require all granted\n\
+</Directory>\n' > /etc/apache2/conf-available/allow.conf && \
+    a2enconf allow
 
 EXPOSE 80
-
 CMD ["apache2ctl", "-D", "FOREGROUND"]
 
